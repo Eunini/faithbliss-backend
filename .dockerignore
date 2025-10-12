@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+.nyc_output
+coverage
+.git
+.gitignore
+README.md
+.nyc_output
+coverage
+.DS_Store
+dist
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local

@@ -1,0 +1,423 @@
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
+import { RegisterDto, LoginDto } from './dto/auth.dto';
+import { OnboardingDto } from './dto/auth-enhanced.dto';
+import * as bcrypt from 'bcrypt';
+import { v4 as uuidv4 } from 'uuid';
+
+export interface JwtPayload {
+  sub: string;
+  email: string;
+  name: string;
+  iat?: number;
+  exp?: number;
+}
+
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+}
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService,
+    private configService: ConfigService,
+  ) {}
+
+  async register(registerDto: RegisterDto): Promise<AuthTokens> {
+    const { email, password, ...userData } = registerDto;
+
+    // Check if user already exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existingUser) {
+      throw new ConflictException('User already exists with this email');
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Create user
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        ...userData,
+        preferences: {
+          create: {
+            preferredGender: userData.gender === 'MALE' ? 'FEMALE' : 'MALE',
+            preferredDenomination: [userData.denomination],
+            minAge: Math.max(18, userData.age - 5),
+            maxAge: userData.age + 10,
+            maxDistance: 50,
+          },
+        },
+      },
+    });
+
+    return this.generateTokens(user);
+  }
+
+  async login(loginDto: LoginDto): Promise<AuthTokens> {
+    try {
+      const { email, password } = loginDto;
+      console.log('Login attempt - Step 1: Finding user for email:', email);
+
+      // Find user
+      const user = await this.prisma.user.findUnique({
+        where: { email },
+      });
+
+      if (!user) {
+        console.log('Login attempt - Step 2: User not found for email:', email);
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      console.log('Login attempt - Step 2: User found, verifying password');
+
+      // Verify password
+      const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+      if (!isPasswordValid) {
+        console.log('Login attempt - Step 3: Password verification failed');
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      console.log('Login attempt - Step 3: Password verified, updating last seen');
+
+      // Update last seen
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { lastSeen: new Date() },
+      });
+
+      console.log('Login attempt - Step 4: Last seen updated, generating tokens');
+
+      return this.generateTokens(user);
+    } catch (error) {
+      // Log the error for debugging
+      console.error('Login error:', error.message || error);
+      
+      // If it's already an UnauthorizedException, rethrow it
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      
+      // For any other error, throw a generic unauthorized error
+      throw new UnauthorizedException('Login failed');
+    }
+  }
+
+  async refreshTokens(refreshToken: string): Promise<AuthTokens> {
+    try {
+      // Find refresh token in database
+      const tokenRecord = await this.prisma.refreshToken.findUnique({
+        where: { token: refreshToken },
+        include: { user: true },
+      });
+
+      if (!tokenRecord || tokenRecord.expiresAt < new Date()) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      // Delete old refresh token
+      await this.prisma.refreshToken.delete({
+        where: { token: refreshToken },
+      });
+
+      return this.generateTokens(tokenRecord.user);
+    } catch (error) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+  }
+
+  async logout(userId: string, refreshToken?: string): Promise<void> {
+    if (refreshToken) {
+      await this.prisma.refreshToken.deleteMany({
+        where: {
+          OR: [
+            { token: refreshToken },
+            { userId },
+          ],
+        },
+      });
+    } else {
+      // Delete all refresh tokens for user
+      await this.prisma.refreshToken.deleteMany({
+        where: { userId },
+      });
+    }
+  }
+
+  async generateTokens(user: any): Promise<AuthTokens> {
+    try {
+      const payload: JwtPayload = {
+        sub: user.id,
+        email: user.email,
+        name: user.name,
+      };
+
+      const jwtSecret = this.configService.get('JWT_SECRET');
+      const jwtRefreshSecret = this.configService.get('JWT_REFRESH_SECRET');
+
+      if (!jwtSecret || !jwtRefreshSecret) {
+        console.error('Missing JWT secrets in configuration');
+        throw new Error('JWT configuration error');
+      }
+
+      const [accessToken, refreshToken] = await Promise.all([
+        this.jwtService.signAsync(payload, {
+          secret: jwtSecret,
+          expiresIn: this.configService.get('JWT_EXPIRES_IN') || '15m',
+        }),
+        this.jwtService.signAsync(payload, {
+          secret: jwtRefreshSecret,
+          expiresIn: this.configService.get('JWT_REFRESH_EXPIRES_IN') || '7d',
+        }),
+      ]);
+
+      // Store refresh token in database
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+
+      await this.prisma.refreshToken.create({
+        data: {
+          token: refreshToken,
+          userId: user.id,
+          expiresAt,
+        },
+      });
+
+      return {
+        accessToken,
+        refreshToken,
+      };
+    } catch (error) {
+      console.error('Token generation error:', error);
+      throw new Error('Failed to generate authentication tokens');
+    }
+  }
+
+  async debugCheckUser(email: string): Promise<any> {
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { email },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          passwordHash: true,
+          createdAt: true,
+        },
+      });
+
+      return {
+        userExists: !!user,
+        userEmail: user?.email,
+        userName: user?.name,
+        passwordHashExists: !!user?.passwordHash,
+        passwordHashLength: user?.passwordHash?.length,
+        createdAt: user?.createdAt,
+      };
+    } catch (error) {
+      return {
+        error: error.message,
+      };
+    }
+  }
+
+  async validateUser(payload: JwtPayload): Promise<any> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        gender: true,
+        denomination: true,
+        age: true,
+        location: true,
+        bio: true,
+        profilePhoto1: true,
+        isActive: true,
+        isVerified: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User not found or inactive');
+    }
+
+    return user;
+  }
+
+  async completeOnboarding(userId: string, onboardingDto: OnboardingDto): Promise<any> {
+    // Extract interests from DTO to handle separately
+    const { interests, spiritualGifts, education, occupation, relationshipGoals, lifestyle, churchAttendance, baptismStatus, ...otherData } = onboardingDto;
+    
+    // Map DTO fields to User model fields
+    const userUpdateData = {
+      ...otherData,
+      // Map education enum to string field
+      ...(education && { fieldOfStudy: education.toString() }),
+      // Map occupation to profession
+      ...(occupation && { profession: occupation }),
+      // Map relationshipGoals to lookingFor
+      ...(relationshipGoals && { lookingFor: relationshipGoals }),
+      // Map lifestyle to personality
+      ...(lifestyle && { personality: lifestyle }),
+      // Map churchAttendance to sundayActivity
+      ...(churchAttendance && { sundayActivity: churchAttendance.toString() }),
+      // Map baptismStatus to faithJourney
+      ...(baptismStatus && { faithJourney: baptismStatus.toString() }),
+    };
+    
+    // Update user with comprehensive onboarding data
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...userUpdateData,
+        onboardingCompleted: true,
+        updatedAt: new Date(),
+        // Handle interests relation if provided
+        ...(interests && {
+          interests: {
+            deleteMany: { userId }, // Remove existing interests
+            create: interests.map(interest => ({ interest }))
+          }
+        }),
+        // Handle spiritual gifts as values if provided
+        ...(spiritualGifts && { values: spiritualGifts }),
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        onboardingCompleted: true,
+        profilePhoto1: true,
+        profilePhoto2: true,
+        profilePhoto3: true,
+        location: true,
+        denomination: true,
+        fieldOfStudy: true,
+        profession: true,
+        hobbies: true,
+        values: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return updatedUser;
+  }
+
+  async googleAuth(googleDto: {
+    email: string;
+    name: string;
+    picture: string;
+    googleId: string;
+  }): Promise<{ user: any; isNewUser: boolean }> {
+    const { email, name, picture, googleId } = googleDto;
+
+    if (!email || !name || !googleId) {
+      throw new BadRequestException('Invalid Google profile data');
+    }
+
+    // Check if user already exists (using email as primary identifier)
+    let user = await this.prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        profilePhoto1: true,
+        profilePhoto2: true,
+        profilePhoto3: true,
+        onboardingCompleted: true,
+        isActive: true,
+        isVerified: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    let isNewUser = false;
+
+    if (!user) {
+      // Create new user with email as ID
+      user = await this.prisma.user.create({
+        data: {
+          id: email, // Use email as the user ID
+          email,
+          name,
+          profilePhoto1: picture, // Use Google profile picture as first photo
+          passwordHash: '', // No password needed for Google OAuth
+          gender: 'MALE', // Default values - will be updated during onboarding
+          age: 25,
+          denomination: 'OTHER',
+          location: '',
+          bio: '',
+          isVerified: true, // Google accounts are considered verified
+          onboardingCompleted: false,
+          googleId,
+          preferences: {
+            create: {
+              preferredGender: 'FEMALE', // Default preference for male users
+              preferredDenomination: ['BAPTIST', 'METHODIST', 'PENTECOSTAL'], // Common denominations
+              minAge: 18,
+              maxAge: 35,
+              maxDistance: 50,
+            },
+          },
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          profilePhoto1: true,
+          profilePhoto2: true,
+          profilePhoto3: true,
+          onboardingCompleted: true,
+          isActive: true,
+          isVerified: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      isNewUser = true;
+    } else {
+      // Update existing user with Google info if needed
+      user = await this.prisma.user.update({
+        where: { email },
+        data: {
+          googleId,
+          isVerified: true,
+          // Update profile photo if they don't have one
+          ...((!user.profilePhoto1 && picture) && { profilePhoto1: picture }),
+          updatedAt: new Date(),
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          profilePhoto1: true,
+          profilePhoto2: true,
+          profilePhoto3: true,
+          onboardingCompleted: true,
+          isActive: true,
+          isVerified: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+    }
+
+    return { user, isNewUser };
+  }
+}

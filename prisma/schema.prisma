@@ -1,0 +1,389 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      String                 @id @default(uuid())
+  email                   String                 @unique
+  passwordHash            String
+  name                    String
+  phoneNumber             String?
+  countryCode             String?
+  gender                  Gender
+  age                     Int
+  birthday                String?
+  showAge                 Boolean                @default(true)
+  location                String
+  latitude                Float?
+  longitude               Float?
+  grewUp                  String?
+  hometown                String?
+  currentLocation         String?
+  denomination            Denomination
+  customDenomination      String?
+  isWorker                Boolean                @default(false)
+  churchDepartment        String?
+  completedClasses        String?
+  churchDuration          String?
+  faithJourney            String?
+  faithInRelationships    String?
+  favoriteVerse           String?
+  fieldOfStudy            String?
+  customFieldOfStudy      String?
+  degree                  String?
+  profession              String?
+  lookingFor              String?
+  hobbies                 String[]               @default([])
+  values                  String[]               @default([])
+  sundayActivity          String?
+  personality             String?
+  aboutMe                 String?
+  bio                     String?
+  isActive                Boolean                @default(true)
+  isVerified              Boolean                @default(false)
+  onboardingCompleted     Boolean                @default(false)
+  lastSeen                DateTime?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  googleId                String?                @unique
+  profilePhoto1           String?
+  profilePhoto2           String?
+  profilePhoto3           String?
+  sentBlessings           BlessWallEntry[]       @relation("SentBlessings")
+  receivedBlessings       BlessWallEntry[]       @relation("ReceivedBlessings")
+  challengeParticipations ChallengeParticipant[] @relation("ChallengeParticipations")
+  posts                   CommunityPost[]        @relation("UserPosts")
+  eventAttendances        EventAttendee[]        @relation("EventAttendances")
+  hostedEvents            Event[]                @relation("HostedEvents")
+  favoriteVerses          FavoriteVerse[]        @relation("FavoriteVerses")
+  matchesAsUser1          Match[]                @relation("User1Matches")
+  matchesAsUser2          Match[]                @relation("User2Matches")
+  receivedMessages        Message[]              @relation("ReceivedMessages")
+  sentMessages            Message[]              @relation("SentMessages")
+  postComments            PostComment[]          @relation("PostComments")
+  postLikes               PostLike[]             @relation("PostLikes")
+  prayerRequests          PrayerRequest[]        @relation("PrayerRequests")
+  prayers                 Prayer[]               @relation("UserPrayers")
+  refreshTokens           RefreshToken[]
+  interests               UserInterest[]         @relation("UserInterests")
+  likedByUsers            UserLike[]             @relation("UserLikes")
+  likedUsers              UserLike[]             @relation("LikedBy")
+  preferences             UserPreferences?
+
+  @@map("users")
+}
+
+model UserPreferences {
+  id                    String         @id @default(uuid())
+  userId                String         @unique
+  preferredGender       Gender?
+  preferredDenomination Denomination[]
+  minAge                Int            @default(18)
+  maxAge                Int            @default(100)
+  maxDistance           Int            @default(50)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  user                  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model UserLike {
+  id          String   @id @default(uuid())
+  userId      String
+  likedUserId String
+  createdAt   DateTime @default(now())
+  likedUser   User     @relation("UserLikes", fields: [likedUserId], references: [id], onDelete: Cascade)
+  user        User     @relation("LikedBy", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, likedUserId])
+  @@map("user_likes")
+}
+
+model Match {
+  id        String      @id @default(uuid())
+  user1Id   String
+  user2Id   String
+  status    MatchStatus @default(MATCHED)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  user1     User        @relation("User1Matches", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2     User        @relation("User2Matches", fields: [user2Id], references: [id], onDelete: Cascade)
+  messages  Message[]
+
+  @@unique([user1Id, user2Id])
+  @@map("matches")
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  matchId    String
+  senderId   String
+  receiverId String
+  content    String
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  match      Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model CommunityPost {
+  id        String        @id @default(uuid())
+  userId    String
+  type      PostType      @default(POST)
+  content   String
+  verse     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  user      User          @relation("UserPosts", fields: [userId], references: [id], onDelete: Cascade)
+  comments  PostComment[]
+  likes     PostLike[]
+
+  @@map("community_posts")
+}
+
+model PostLike {
+  id        String        @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime      @default(now())
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User          @relation("PostLikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("post_likes")
+}
+
+model PostComment {
+  id        String        @id @default(uuid())
+  userId    String
+  postId    String
+  content   String
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User          @relation("PostComments", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("post_comments")
+}
+
+model Event {
+  id           String          @id @default(uuid())
+  title        String
+  description  String
+  type         EventType
+  hostId       String
+  date         DateTime
+  time         String
+  location     String?
+  isVirtual    Boolean         @default(true)
+  maxAttendees Int?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  attendees    EventAttendee[]
+  host         User            @relation("HostedEvents", fields: [hostId], references: [id], onDelete: Cascade)
+
+  @@map("events")
+}
+
+model EventAttendee {
+  id       String   @id @default(uuid())
+  eventId  String
+  userId   String
+  joinedAt DateTime @default(now())
+  event    Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user     User     @relation("EventAttendances", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@map("event_attendees")
+}
+
+model PrayerRequest {
+  id          String              @id @default(uuid())
+  userId      String?
+  content     String
+  isAnonymous Boolean             @default(false)
+  status      PrayerRequestStatus @default(ACTIVE)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  user        User?               @relation("PrayerRequests", fields: [userId], references: [id], onDelete: Cascade)
+  prayers     Prayer[]
+
+  @@map("prayer_requests")
+}
+
+model Prayer {
+  id              String        @id @default(uuid())
+  prayerRequestId String
+  userId          String
+  createdAt       DateTime      @default(now())
+  prayerRequest   PrayerRequest @relation(fields: [prayerRequestId], references: [id], onDelete: Cascade)
+  user            User          @relation("UserPrayers", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([prayerRequestId, userId])
+  @@map("prayers")
+}
+
+model Challenge {
+  id           String                 @id @default(uuid())
+  title        String
+  description  String
+  type         ChallengeType
+  duration     Int
+  reward       String
+  isActive     Boolean                @default(true)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  participants ChallengeParticipant[]
+
+  @@map("challenges")
+}
+
+model ChallengeParticipant {
+  id          String    @id @default(uuid())
+  challengeId String
+  userId      String
+  progress    Int       @default(0)
+  isCompleted Boolean   @default(false)
+  joinedAt    DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user        User      @relation("ChallengeParticipations", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeId, userId])
+  @@map("challenge_participants")
+}
+
+model BlessWallEntry {
+  id         String   @id @default(uuid())
+  fromUserId String
+  toUserId   String
+  message    String
+  verse      String?
+  isPublic   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  fromUser   User     @relation("SentBlessings", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser     User     @relation("ReceivedBlessings", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@map("bless_wall_entries")
+}
+
+model UserInterest {
+  id        String   @id @default(uuid())
+  userId    String
+  interest  String
+  createdAt DateTime @default(now())
+  user      User     @relation("UserInterests", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, interest])
+  @@map("user_interests")
+}
+
+model FavoriteVerse {
+  id        String   @id @default(uuid())
+  userId    String
+  verse     String
+  reference String
+  createdAt DateTime @default(now())
+  user      User     @relation("FavoriteVerses", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("favorite_verses")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum Denomination {
+  BAPTIST
+  METHODIST
+  PRESBYTERIAN
+  PENTECOSTAL
+  CATHOLIC
+  ORTHODOX
+  ANGLICAN
+  LUTHERAN
+  ASSEMBLIES_OF_GOD
+  SEVENTH_DAY_ADVENTIST
+  OTHER
+}
+
+enum MatchStatus {
+  PENDING
+  MATCHED
+  REJECTED
+}
+
+enum EducationLevel {
+  HIGH_SCHOOL
+  BACHELORS
+  MASTERS
+  PHD
+  VOCATIONAL
+  OTHER
+}
+
+enum ChurchAttendance {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  OCCASIONALLY
+  RARELY
+}
+
+enum BaptismStatus {
+  YES
+  NO
+  PLANNING
+}
+
+enum PostType {
+  POST
+  VERSE
+  TESTIMONY
+}
+
+enum EventType {
+  BIBLE_STUDY
+  PRAYER_MEETING
+  FELLOWSHIP
+  WORSHIP
+  VOLUNTEER
+  OTHER
+}
+
+enum PrayerRequestStatus {
+  ACTIVE
+  ANSWERED
+  CLOSED
+}
+
+enum ChallengeType {
+  DAILY_VERSE
+  ACTS_OF_KINDNESS
+  PRAYER
+  BIBLE_READING
+  FELLOWSHIP
+}

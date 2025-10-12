@@ -1,0 +1,97 @@
+import { IsOptional, IsString, IsInt, IsUrl, IsEnum, IsArray, Min, Max } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export enum Gender {
+  MALE = 'MALE',
+  FEMALE = 'FEMALE',
+}
+
+export enum Denomination {
+  BAPTIST = 'BAPTIST',
+  METHODIST = 'METHODIST',
+  PRESBYTERIAN = 'PRESBYTERIAN',
+  PENTECOSTAL = 'PENTECOSTAL',
+  CATHOLIC = 'CATHOLIC',
+  ORTHODOX = 'ORTHODOX',
+  ANGLICAN = 'ANGLICAN',
+  LUTHERAN = 'LUTHERAN',
+  ASSEMBLIES_OF_GOD = 'ASSEMBLIES_OF_GOD',
+  SEVENTH_DAY_ADVENTIST = 'SEVENTH_DAY_ADVENTIST',
+  OTHER = 'OTHER',
+}
+
+export class UpdateProfileDto {
+  @ApiPropertyOptional({ description: 'User name' })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional({ description: 'User age', minimum: 18, maximum: 100 })
+  @IsOptional()
+  @IsInt()
+  @Min(18)
+  @Max(100)
+  age?: number;
+
+  @ApiPropertyOptional({ description: 'User bio/description' })
+  @IsOptional()
+  @IsString()
+  bio?: string;
+
+  @ApiPropertyOptional({ description: 'Location (city, state)' })
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional({ description: 'Primary profile photo (base64 or URL)' })
+  @IsOptional()
+  @IsString()
+  profilePhoto1?: string;
+
+  @ApiPropertyOptional({ description: 'Secondary profile photo (base64 or URL)' })
+  @IsOptional()
+  @IsString()
+  profilePhoto2?: string;
+
+  @ApiPropertyOptional({ description: 'Third profile photo (base64 or URL)' })
+  @IsOptional()
+  @IsString()
+  profilePhoto3?: string;
+
+
+}
+
+export class UpdatePreferencesDto {
+  @ApiPropertyOptional({ enum: Gender, description: 'Preferred gender' })
+  @IsOptional()
+  @IsEnum(Gender)
+  preferredGender?: Gender;
+
+  @ApiPropertyOptional({ 
+    enum: Denomination, 
+    isArray: true, 
+    description: 'Preferred denominations' 
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(Denomination, { each: true })
+  preferredDenomination?: Denomination[];
+
+  @ApiPropertyOptional({ description: 'Minimum age preference', minimum: 18 })
+  @IsOptional()
+  @IsInt()
+  @Min(18)
+  minAge?: number;
+
+  @ApiPropertyOptional({ description: 'Maximum age preference', maximum: 100 })
+  @IsOptional()
+  @IsInt()
+  @Max(100)
+  maxAge?: number;
+
+  @ApiPropertyOptional({ description: 'Maximum distance in miles', minimum: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxDistance?: number;
+}
