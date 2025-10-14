@@ -257,32 +257,91 @@ export class AuthService {
     return user;
   }
 
-  async completeOnboarding(userId: string, onboardingDto: OnboardingDto): Promise<any> {
-    // Extract interests from DTO to handle separately
-    const { interests, spiritualGifts, education, occupation, relationshipGoals, lifestyle, churchAttendance, baptismStatus, ...otherData } = onboardingDto;
-    
+  async completeOnboarding(userId: string, onboardingDto: OnboardingDto, files?: Express.Multer.File[]): Promise<any> {
+    // Validate profile photos - first 2 are required, 3rd is optional
+    if (!files || files.length < 2) {
+      throw new BadRequestException('At least 2 profile photos are required for onboarding');
+    }
+
+    if (files.length > 3) {
+      throw new BadRequestException('Maximum 3 profile photos allowed');
+    }
+
+    // Validate file types and sizes
+    const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    const maxFileSize = 5 * 1024 * 1024; // 5MB
+
+    for (const file of files) {
+      if (!allowedMimeTypes.includes(file.mimetype)) {
+        throw new BadRequestException('Only JPEG, PNG, and WebP images are allowed');
+      }
+      if (file.size > maxFileSize) {
+        throw new BadRequestException('File size must be less than 5MB');
+      }
+    }
+
+    // Extract preferences from DTO to handle separately
+    const {
+      preferredGender,
+      preferredDenominations,
+      minAge,
+      maxAge,
+      maxDistance,
+      preferredFaithJourney,
+      preferredChurchAttendance,
+      preferredRelationshipGoals,
+      interests,
+      spiritualGifts,
+      education,
+      occupation,
+      relationshipGoals, // User's own relationship goals
+      lifestyle,
+      churchAttendance, // User's own church attendance
+      baptismStatus,
+      faithJourney, // User's own faith journey
+      phoneNumber,
+      countryCode,
+      birthday,
+      ...otherData
+    } = onboardingDto;
+
     // Map DTO fields to User model fields
     const userUpdateData = {
       ...otherData,
+      // Basic contact information
+      ...(phoneNumber && { phoneNumber }),
+      ...(countryCode && { countryCode }),
+      ...(birthday && { birthday }),
       // Map education enum to string field
       ...(education && { fieldOfStudy: education.toString() }),
       // Map occupation to profession
       ...(occupation && { profession: occupation }),
-      // Map relationshipGoals to lookingFor
-      ...(relationshipGoals && { lookingFor: relationshipGoals }),
+      // Map user's own relationship goals to lookingFor
+      ...(relationshipGoals && { lookingFor: relationshipGoals.toString() }),
       // Map lifestyle to personality
       ...(lifestyle && { personality: lifestyle }),
-      // Map churchAttendance to sundayActivity
+      // Map user's own church attendance to sundayActivity
       ...(churchAttendance && { sundayActivity: churchAttendance.toString() }),
-      // Map baptismStatus to faithJourney
+      // Map baptism status to faithJourney (keeping existing logic)
       ...(baptismStatus && { faithJourney: baptismStatus.toString() }),
+      // Override with user's own faith journey if provided
+      ...(faithJourney && { faithJourney: faithJourney.toString() }),
     };
-    
+
+    // Convert uploaded photos to base64
+    const photoData: Record<string, string> = {};
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const base64 = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+      photoData[`profilePhoto${i + 1}`] = base64;
+    }
+
     // Update user with comprehensive onboarding data
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
       data: {
         ...userUpdateData,
+        ...photoData,
         onboardingCompleted: true,
         updatedAt: new Date(),
         // Handle interests relation if provided
@@ -294,6 +353,19 @@ export class AuthService {
         }),
         // Handle spiritual gifts as values if provided
         ...(spiritualGifts && { values: spiritualGifts }),
+        // Update user preferences based on onboarding selections
+        preferences: {
+          update: {
+            ...(preferredGender && { preferredGender }),
+            ...(preferredDenominations && { preferredDenomination: preferredDenominations }),
+            ...(minAge && { minAge }),
+            ...(maxAge && { maxAge }),
+            ...(maxDistance && { maxDistance }),
+            ...(preferredFaithJourney && { preferredFaithJourney }),
+            ...(preferredChurchAttendance && { preferredChurchAttendance }),
+            ...(preferredRelationshipGoals && { preferredRelationshipGoals }),
+          }
+        },
       },
       select: {
         id: true,
@@ -309,6 +381,7 @@ export class AuthService {
         profession: true,
         hobbies: true,
         values: true,
+        favoriteVerse: true,
         createdAt: true,
         updatedAt: true,
       },

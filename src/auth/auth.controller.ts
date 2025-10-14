@@ -1,11 +1,12 @@
-import { Controller, Post, Body, Res, Req, HttpCode, HttpStatus, UseGuards, Put, Get } from '@nestjs/common';
+import { Controller, Post, Body, Res, Req, HttpCode, HttpStatus, UseGuards, Put, Get, UseInterceptors, UploadedFiles } from '@nestjs/common';
 import { Response, Request } from 'express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { AuthService } from './auth.service';
 import { RegisterDto, LoginDto, RefreshTokenDto } from './dto/auth.dto';
 import { OnboardingDto } from './dto/auth-enhanced.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -203,7 +204,19 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Complete user onboarding with comprehensive profile data' })
+  @UseInterceptors(FilesInterceptor('photos', 3, {
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit per file
+    fileFilter: (req, file, callback) => {
+      const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (allowedMimeTypes.includes(file.mimetype)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Only JPEG, PNG, and WebP images are allowed'), false);
+      }
+    },
+  }))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Complete user onboarding with comprehensive profile data and photos' })
   @ApiResponse({ 
     status: 200, 
     description: 'Onboarding completed successfully',
@@ -215,19 +228,75 @@ export class AuthController {
           type: 'object',
           properties: {
             id: { type: 'string' },
+            name: { type: 'string' },
+            favoriteVerse: { type: 'string' },
             onboardingCompleted: { type: 'boolean', example: true },
+            profilePhoto1: { type: 'string' },
+            profilePhoto2: { type: 'string' },
+            profilePhoto3: { type: 'string', nullable: true },
           },
         },
       },
     },
   })
-  @ApiResponse({ status: 400, description: 'Validation failed' })
+  @ApiResponse({ status: 400, description: 'Validation failed or invalid file format' })
   @ApiResponse({ status: 404, description: 'User not found' })
   async completeOnboarding(
     @Req() request: Request & { user: any },
-    @Body() onboardingDto: OnboardingDto,
+    @UploadedFiles() files?: Express.Multer.File[],
   ) {
-    const result = await this.authService.completeOnboarding(request.user.id, onboardingDto);
+    // Extract onboarding data from FormData fields
+    const onboardingData = {
+      // Basic Information
+      phoneNumber: request.body.phone_number,
+      countryCode: request.body.country_code,
+      birthday: request.body.birthday,
+
+      // Educational Background
+      education: request.body.education,
+      occupation: request.body.occupation,
+
+      // Location
+      location: request.body.location,
+      latitude: request.body.latitude ? parseFloat(request.body.latitude) : undefined,
+      longitude: request.body.longitude ? parseFloat(request.body.longitude) : undefined,
+
+      // Faith Journey
+      denomination: request.body.denomination,
+      churchAttendance: request.body.church_attendance,
+      baptismStatus: request.body.baptism_status,
+      faithJourney: request.body.faith_journey,
+      spiritualGifts: request.body.spiritual_gifts ? JSON.parse(request.body.spiritual_gifts) : undefined,
+
+      // Personal Preferences
+      interests: request.body.interests ? JSON.parse(request.body.interests) : undefined,
+      relationshipGoals: request.body.relationship_goals,
+      lifestyle: request.body.personality, // Map personality to lifestyle
+      bio: request.body.bio,
+      favoriteVerse: request.body.favorite_verse,
+
+      // Matching Preferences
+      preferredGender: request.body.preferred_gender === 'MAN' ? 'MALE' : 
+                      request.body.preferred_gender === 'WOMAN' ? 'FEMALE' : 
+                      request.body.preferred_gender,
+      preferredDenominations: request.body.preferred_denominations ? JSON.parse(request.body.preferred_denominations) : undefined,
+      minAge: request.body.min_age ? parseInt(request.body.min_age) : undefined,
+      maxAge: request.body.max_age ? parseInt(request.body.max_age) : undefined,
+      maxDistance: request.body.max_distance ? parseInt(request.body.max_distance) : undefined,
+      preferredFaithJourney: request.body.preferred_faith_journey ? JSON.parse(request.body.preferred_faith_journey) : undefined,
+      preferredChurchAttendance: request.body.preferred_church_attendance ? JSON.parse(request.body.preferred_church_attendance) : undefined,
+      preferredRelationshipGoals: request.body.preferred_relationship_goals ? JSON.parse(request.body.preferred_relationship_goals) : undefined,
+    };
+
+    // Add hobbies and values if provided
+    if (request.body.hobbies) {
+      onboardingData.interests = JSON.parse(request.body.hobbies);
+    }
+    if (request.body.values) {
+      onboardingData.spiritualGifts = JSON.parse(request.body.values);
+    }
+
+    const result = await this.authService.completeOnboarding(request.user.id, onboardingData, files);
 
     return {
       message: 'Onboarding completed successfully',
