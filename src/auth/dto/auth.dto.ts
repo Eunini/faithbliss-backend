@@ -37,11 +37,11 @@ export class RegisterDto {
 
   @ApiProperty({ example: 'MALE', enum: Gender })
   @IsEnum(Gender)
-  gender: Gender;
+  gender?: Gender;
 
   @ApiProperty({ example: 'BAPTIST', enum: Denomination })
   @IsEnum(Denomination)
-  denomination: Denomination;
+  denomination?: Denomination;
 
   @ApiProperty({ example: 28, minimum: 18, maximum: 100 })
   @IsInt()
@@ -52,7 +52,7 @@ export class RegisterDto {
   @ApiProperty({ example: 'Lagos, Nigeria' })
   @IsString()
   @IsNotEmpty()
-  location: string;
+  location?: string;
 
   @ApiProperty({ 
     example: 'Passionate about serving God and looking for a faithful partner.',

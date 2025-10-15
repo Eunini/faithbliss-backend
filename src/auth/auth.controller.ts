@@ -40,10 +40,10 @@ export class AuthController {
     @Body() registerDto: RegisterDto,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const tokens = await this.authService.register(registerDto);
+    const {user, AuthTokens} = await this.authService.register(registerDto);
 
     // Set refresh token as httpOnly cookie
-    response.cookie('refreshToken', tokens.refreshToken, {
+    response.cookie('refreshToken', AuthTokens.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
@@ -52,11 +52,8 @@ export class AuthController {
 
     return {
       message: 'Registration successful',
-      accessToken: tokens.accessToken,
-      user: {
-        email: registerDto.email,
-        name: registerDto.name,
-      },
+      accessToken: AuthTokens.accessToken,
+      user: user,
     };
   }
 

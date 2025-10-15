@@ -28,8 +28,8 @@ export class AuthService {
     private configService: ConfigService,
   ) {}
 
-  async register(registerDto: RegisterDto): Promise<AuthTokens> {
-    const { email, password, ...userData } = registerDto;
+  async register(registerDto: RegisterDto): Promise<{user: any, AuthTokens:AuthTokens}> {
+    const { email, password, location, denomination, gender, ...userData } = registerDto;
 
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
@@ -48,10 +48,16 @@ export class AuthService {
       data: {
         email,
         passwordHash,
+        location: '',
+        bio: '',
+        isVerified: false,
+        onboardingCompleted: false,
+        denomination: 'OTHER',
+        gender: 'MALE', //default value
         ...userData,
         preferences: {
           create: {
-            preferredGender: userData.gender === 'MALE' ? 'FEMALE' : 'MALE',
+            preferredGender: 'FEMALE',
             preferredDenomination: [userData.denomination],
             minAge: Math.max(18, userData.age - 5),
             maxAge: userData.age + 10,
@@ -59,9 +65,21 @@ export class AuthService {
           },
         },
       },
+      select: {
+        id: true,
+          email: true,
+          name: true,
+          onboardingCompleted: true,
+          isActive: true,
+          isVerified: true,
+          createdAt: true,
+          updatedAt: true,
+      }
     });
 
-    return this.generateTokens(user);
+    const AuthTokens = await this.generateTokens(user)
+    return { user, AuthTokens};
+
   }
 
   async login(loginDto: LoginDto): Promise<AuthTokens> {
