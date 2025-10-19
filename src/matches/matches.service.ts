@@ -1,9 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { User } from '@prisma/client';
+import { MessagesService } from '../messages/messages.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Injectable()
 export class MatchesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private messagesService: MessagesService,
+    private notificationsGateway: NotificationsGateway,
+  ) {}
 
   async getUserMatches(userId: string) {
     return this.prisma.match.findMany({
@@ -134,6 +141,8 @@ export class MatchesService {
           location: true,
           bio: true,
           profilePhoto1: true,
+          profilePhoto2: true,
+          profilePhoto3: true,
           isVerified: true,
           faithJourney: true,
           sundayActivity: true,
@@ -169,6 +178,8 @@ export class MatchesService {
             location: true,
             bio: true,
             profilePhoto1: true,
+            profilePhoto2: true,
+            profilePhoto3: true,
             isVerified: true,
             faithJourney: true,
             sundayActivity: true,
@@ -187,6 +198,107 @@ export class MatchesService {
     } catch (error) {
       console.error('Error in getPotentialMatches:', error);
       throw new Error(`Failed to get potential matches: ${error.message}`);
+    }
+  }
+
+  async getFilteredMatches(userId: string, filters: any, page: number = 1, limit: number = 10) {
+    try {
+      const skip = (page - 1) * limit;
+
+      // Get users that have already been liked or matched
+      const likedUserIds = await this.prisma.userLike.findMany({
+        where: { userId },
+        select: { likedUserId: true },
+      });
+
+      const likedIds = likedUserIds.map(like => like.likedUserId);
+      likedIds.push(userId); // Exclude self
+
+      // Build where conditions based on provided filters
+      const whereConditions: any = {
+        id: { notIn: likedIds },
+        isActive: true,
+        onboardingCompleted: true,
+      };
+
+      // Apply filters from the request
+      if (filters.preferredGender) {
+        whereConditions.gender = filters.preferredGender;
+      }
+
+      if (filters.preferredDenominations && filters.preferredDenominations.length > 0) {
+        whereConditions.denomination = { in: filters.preferredDenominations };
+      }
+
+      if (filters.minAge || filters.maxAge) {
+        whereConditions.age = {};
+        if (filters.minAge) whereConditions.age.gte = filters.minAge;
+        if (filters.maxAge) whereConditions.age.lte = filters.maxAge;
+      }
+
+      // Advanced filters
+      if (filters.preferredFaithJourney && Array.isArray(filters.preferredFaithJourney) && filters.preferredFaithJourney.length > 0) {
+        whereConditions.faithJourney = { in: filters.preferredFaithJourney };
+      }
+
+      if (filters.preferredChurchAttendance && Array.isArray(filters.preferredChurchAttendance) && filters.preferredChurchAttendance.length > 0) {
+        const churchAttendanceMap: { [key: string]: string } = {
+          'WEEKLY': 'WEEKLY',
+          'BIWEEKLY': 'BIWEEKLY',
+          'MONTHLY': 'MONTHLY',
+          'OCCASIONALLY': 'OCCASIONALLY',
+          'RARELY': 'RARELY',
+        };
+
+        const mappedAttendance = filters.preferredChurchAttendance
+          .map(attendance => churchAttendanceMap[attendance])
+          .filter(Boolean);
+
+        if (mappedAttendance.length > 0) {
+          whereConditions.sundayActivity = { in: mappedAttendance };
+        }
+      }
+
+      if (filters.preferredRelationshipGoals && Array.isArray(filters.preferredRelationshipGoals) && filters.preferredRelationshipGoals.length > 0) {
+        const relationshipGoalsConditions = filters.preferredRelationshipGoals.map(goal => ({
+          lookingFor: { equals: goal }
+        }));
+
+        if (relationshipGoalsConditions.length > 0) {
+          whereConditions.OR = whereConditions.OR
+            ? [...whereConditions.OR, ...relationshipGoalsConditions]
+            : relationshipGoalsConditions;
+        }
+      }
+
+      return await this.prisma.user.findMany({
+        where: whereConditions,
+        select: {
+          id: true,
+          name: true,
+          age: true,
+          gender: true,
+          denomination: true,
+          location: true,
+          bio: true,
+          profilePhoto1: true,
+          profilePhoto2: true,
+          profilePhoto3: true,
+          isVerified: true,
+          faithJourney: true,
+          sundayActivity: true,
+          lookingFor: true,
+          values: true,
+          fieldOfStudy: true,
+          profession: true,
+        },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      });
+    } catch (error) {
+      console.error('Error in getFilteredMatches:', error);
+      throw new Error(`Failed to get filtered matches: ${error.message}`);
     }
   }
 
@@ -227,29 +339,43 @@ export class MatchesService {
       // Create match
       const match = await this.prisma.match.create({
         data: {
-          user1Id: userId,
-          user2Id: likedUserId,
+          user1: { connect: { id: userId } },
+          user2: { connect: { id: likedUserId } },
           status: 'MATCHED',
         },
-        include: {
-          user1: {
-            select: {
-              id: true,
-              name: true,
-              profilePhoto1: true,
-            },
-          },
-          user2: {
-            select: {
-              id: true,
-              name: true,
-              profilePhoto1: true,
-            },
-          },
-        },
       });
-      
+
+      // Notify both users about the new match
+      const user = await this.prisma.user.findUnique({ where: { id: userId } });
+      const likedUser = await this.prisma.user.findUnique({ where: { id: likedUserId } });
+
+      if (user && likedUser) {
+        this.notificationsGateway.sendNotificationToUser(userId, {
+          type: 'NEW_MATCH',
+          message: `You have a new match with ${likedUser.name}!`, 
+          matchId: match.id,
+          otherUser: { id: likedUser.id, name: likedUser.name },
+        });
+        this.notificationsGateway.sendNotificationToUser(likedUserId, {
+          type: 'NEW_MATCH',
+          message: `You have a new match with ${user.name}!`, 
+          matchId: match.id,
+          otherUser: { id: user.id, name: user.name },
+        });
+      }
+
       return { isMatch: true, match };
+    }
+
+    // If not a mutual like, send a 'profile_liked' notification to the liked user
+    const likerUser = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (likerUser) {
+      this.notificationsGateway.sendNotificationToUser(likedUserId, {
+        type: 'PROFILE_LIKED',
+        message: `${likerUser.name} liked your profile!`,
+        senderId: userId,
+        senderName: likerUser.name,
+      });
     }
 
     return { isMatch: false, match: null };

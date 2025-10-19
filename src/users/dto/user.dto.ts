@@ -94,4 +94,34 @@ export class UpdatePreferencesDto {
   @IsInt()
   @Min(1)
   maxDistance?: number;
+
+  @ApiPropertyOptional({ 
+    type: [String], 
+    enum: ['GROWING', 'ROOTED', 'EXPLORING', 'PASSIONATE'],
+    description: 'Preferred faith journey stages' 
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  preferredFaithJourney?: string[];
+
+  @ApiPropertyOptional({ 
+    type: [String], 
+    enum: ['WEEKLY', 'BIWEEKLY', 'MONTHLY', 'OCCASIONALLY', 'RARELY'],
+    description: 'Preferred church attendance frequencies' 
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  preferredChurchAttendance?: string[];
+
+  @ApiPropertyOptional({ 
+    type: [String], 
+    enum: ['FRIENDSHIP', 'RELATIONSHIP', 'MARRIAGE_MINDED'],
+    description: 'Preferred relationship goals' 
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  preferredRelationshipGoals?: string[];
 }

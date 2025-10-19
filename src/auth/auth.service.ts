@@ -5,7 +5,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto, LoginDto } from './dto/auth.dto';
 import { OnboardingDto } from './dto/auth-enhanced.dto';
 import * as bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
 
 export interface JwtPayload {
   sub: string;
@@ -317,7 +316,7 @@ export class AuthService {
       // Map occupation to profession
       ...(occupation && { profession: occupation }),
       // Map user's own relationship goals to lookingFor
-      ...(relationshipGoals && { lookingFor: relationshipGoals.toString() }),
+      ...(relationshipGoals && { lookingFor: { set: relationshipGoals.map(goal => goal.toString()) } }),
       // Map lifestyle to personality
       ...(lifestyle && { personality: lifestyle }),
       // Map user's own church attendance to sundayActivity
@@ -388,6 +387,17 @@ export class AuthService {
     });
 
     return updatedUser;
+  }
+
+  async verifyToken(token: string): Promise<JwtPayload> {
+    try {
+      const payload = await this.jwtService.verifyAsync(token, {
+        secret: this.configService.get('JWT_SECRET'),
+      });
+      return payload;
+    } catch (error) {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
   }
 
   async googleAuth(googleDto: {

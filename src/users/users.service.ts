@@ -19,9 +19,26 @@ export class UsersService {
         denomination: true,
         bio: true,
         location: true,
+        latitude: true,
+        longitude: true,
+        phoneNumber: true,
+        countryCode: true,
+        birthday: true,
+        fieldOfStudy: true,
+        profession: true,
+        faithJourney: true,
+        sundayActivity: true,
+        lookingFor: true,
+        hobbies: true,
+        values: true,
+        favoriteVerse: true,
         profilePhoto1: true,
+        profilePhoto2: true,
+        profilePhoto3: true,
         isVerified: true,
+        onboardingCompleted: true,
         createdAt: true,
+        updatedAt: true,
         preferences: {
           select: {
             preferredGender: true,
@@ -29,6 +46,9 @@ export class UsersService {
             minAge: true,
             maxAge: true,
             maxDistance: true,
+            preferredFaithJourney: true,
+            preferredChurchAttendance: true,
+            preferredRelationshipGoals: true,
           },
         },
       },
@@ -498,6 +518,48 @@ export class UsersService {
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         throw new ConflictException('Failed to upload photo');
+      }
+      throw error;
+    }
+  }
+
+  async removeProfilePhoto(userId: string, photoNumber: number) {
+    if (photoNumber < 1 || photoNumber > 3) {
+      throw new ConflictException('Photo number must be between 1 and 3');
+    }
+
+    const photoField = `profilePhoto${photoNumber}`;
+
+    const updateData: Record<string, any> = {
+      [photoField]: null,
+      updatedAt: new Date(),
+    };
+
+    try {
+      const updatedUser = await this.prisma.user.update({
+        where: { id: userId },
+        data: updateData,
+        select: {
+          id: true,
+          profilePhoto1: true,
+          profilePhoto2: true,
+          profilePhoto3: true,
+          updatedAt: true,
+        },
+      });
+
+      return {
+        message: `Photo ${photoNumber} removed successfully`,
+        photoNumber,
+        photos: {
+          profilePhoto1: updatedUser.profilePhoto1,
+          profilePhoto2: updatedUser.profilePhoto2,
+          profilePhoto3: updatedUser.profilePhoto3,
+        },
+      };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        throw new ConflictException('Failed to remove photo');
       }
       throw error;
     }

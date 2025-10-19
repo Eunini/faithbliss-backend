@@ -36,5 +36,9 @@ USER nestjs
 # Expose app port
 EXPOSE 3001
 
-# Run Prisma migrations before starting the app
-CMD npx prisma migrate deploy && node dist/main.js
+# Copy entrypoint and make it executable (entrypoint runs migrations then starts the app)
+COPY --chown=nestjs:nodejs docker-entrypoint.sh /usr/src/app/docker-entrypoint.sh
+RUN chmod +x /usr/src/app/docker-entrypoint.sh
+
+# Use entrypoint script as the container command
+CMD ["/usr/src/app/docker-entrypoint.sh"]

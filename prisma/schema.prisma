@@ -38,7 +38,7 @@ model User {
   customFieldOfStudy      String?
   degree                  String?
   profession              String?
-  lookingFor              String?
+  lookingFor              String[]               @default([])
   hobbies                 String[]               @default([])
   values                  String[]               @default([])
   sundayActivity          String?

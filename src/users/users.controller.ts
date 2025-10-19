@@ -1,4 +1,4 @@
-import { 
+import {
   Controller,
   Get,
   Put,
@@ -11,7 +11,9 @@ import {
   HttpCode,
   HttpStatus,
   UseInterceptors,
-  UploadedFiles
+  UploadedFiles,
+  BadRequestException,
+  Delete
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { Request } from 'express';
@@ -44,7 +46,56 @@ export class UsersController {
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user profile' })
-  @ApiResponse({ status: 200, description: 'User profile retrieved successfully' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'User profile retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', example: 'user-uuid' },
+        email: { type: 'string', example: 'user@example.com' },
+        name: { type: 'string', example: 'John Doe' },
+        gender: { type: 'string', enum: ['MALE', 'FEMALE'] },
+        age: { type: 'number', example: 28 },
+        denomination: { type: 'string', enum: ['BAPTIST', 'METHODIST', 'CATHOLIC', 'OTHER'] },
+        bio: { type: 'string', example: 'Passionate about faith and technology' },
+        location: { type: 'string', example: 'Lagos, Nigeria' },
+        latitude: { type: 'number', example: 6.5244 },
+        longitude: { type: 'number', example: 3.3792 },
+        phoneNumber: { type: 'string', example: '+2348012345678' },
+        countryCode: { type: 'string', example: '+234' },
+        birthday: { type: 'string', example: '1995-06-15' },
+        fieldOfStudy: { type: 'string', example: 'Computer Science' },
+        profession: { type: 'string', example: 'Software Engineer' },
+        faithJourney: { type: 'string', example: 'GROWING' },
+        sundayActivity: { type: 'string', example: 'WEEKLY' },
+        lookingFor: { type: 'array', items: { type: 'string' }, example: ['RELATIONSHIP'] },
+        hobbies: { type: 'array', items: { type: 'string' }, example: ['Reading', 'Music'] },
+        values: { type: 'array', items: { type: 'string' }, example: ['Faith', 'Honesty'] },
+        favoriteVerse: { type: 'string', example: 'John 3:16' },
+        profilePhoto1: { type: 'string', example: 'data:image/jpeg;base64,...' },
+        profilePhoto2: { type: 'string', example: 'data:image/jpeg;base64,...', nullable: true },
+        profilePhoto3: { type: 'string', example: 'data:image/jpeg;base64,...', nullable: true },
+        isVerified: { type: 'boolean', example: false },
+        onboardingCompleted: { type: 'boolean', example: true },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: { type: 'string', format: 'date-time' },
+        preferences: {
+          type: 'object',
+          properties: {
+            preferredGender: { type: 'string', enum: ['MALE', 'FEMALE'], nullable: true },
+            preferredDenomination: { type: 'array', items: { type: 'string' }, nullable: true },
+            minAge: { type: 'number', nullable: true },
+            maxAge: { type: 'number', nullable: true },
+            maxDistance: { type: 'number', nullable: true },
+            preferredFaithJourney: { type: 'array', items: { type: 'string' }, nullable: true },
+            preferredChurchAttendance: { type: 'array', items: { type: 'string' }, nullable: true },
+            preferredRelationshipGoals: { type: 'array', items: { type: 'string' }, nullable: true },
+          }
+        }
+      }
+    }
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
   async getMyProfile(@Req() request: Request & { user: any }) {
     return this.usersService.getUserProfile(request.user.id);
@@ -215,9 +266,25 @@ export class UsersController {
   ) {
     const photoNum = parseInt(photoNumber);
     if (photoNum < 1 || photoNum > 3) {
-      throw new Error('Photo number must be between 1 and 3');
+      throw new BadRequestException('Photo number must be between 1 and 3');
     }
     
     return this.usersService.uploadSingleProfilePhoto(request.user.id, photoNum, files[0]);
+  }
+
+  @Delete('me/photo/:photoNumber')
+  @ApiOperation({ summary: 'Remove a profile photo by number (1-3)' })
+  @ApiResponse({ status: 200, description: 'Photo removed successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid photo number' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async removeProfilePhoto(
+    @Req() request: Request & { user: any },
+    @Param('photoNumber') photoNumber: string,
+  ) {
+    const photoNum = parseInt(photoNumber);
+    if (photoNum < 1 || photoNum > 3) {
+      throw new BadRequestException('Photo number must be between 1 and 3');
+    }
+    return this.usersService.removeProfilePhoto(request.user.id, photoNum);
   }
 }

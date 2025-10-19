@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit, forwardRef, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MessagesGateway } from './messages.gateway';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 export interface SendMessageDto {
   matchId: string;
@@ -8,7 +10,12 @@ export interface SendMessageDto {
 
 @Injectable()
 export class MessagesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => MessagesGateway))
+    private messagesGateway: MessagesGateway,
+    private notificationsGateway: NotificationsGateway,
+  ) {}
 
   async sendMessage(senderId: string, sendMessageDto: SendMessageDto) {
     const { matchId, content } = sendMessageDto;
@@ -30,7 +37,7 @@ export class MessagesService {
 
     const receiverId = match.user1Id === senderId ? match.user2Id : match.user1Id;
 
-    return this.prisma.message.create({
+    const message = await this.prisma.message.create({
       data: {
         matchId,
         senderId,
@@ -38,6 +45,27 @@ export class MessagesService {
         content,
       },
     });
+
+    // Emit to all users in the match room
+    this.messagesGateway.server.to(`match_${matchId}`).emit('newMessage', message);
+
+    // Update unread count for the receiver
+    const unreadCount = await this.getUnreadMessageCount(receiverId);
+    this.messagesGateway.server.to(`user_${receiverId}`).emit('unreadCount', { count: unreadCount });
+
+    // Send real-time notification to the receiver
+    this.notificationsGateway.sendNotificationToUser(receiverId, {
+      type: 'NEW_MESSAGE',
+      message: `New message from ${senderId}: ${content.substring(0, 50)}...`,
+      senderId: senderId,
+      matchId: matchId,
+    });
+
+    return message;
+  }
+
+  sendNotification(userId: string, notification: any) {
+    this.messagesGateway.sendNotificationToUser(userId, notification);
   }
 
   async getMatchMessages(matchId: string, userId: string, page: number = 1, limit: number = 50) {

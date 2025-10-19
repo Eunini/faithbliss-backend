@@ -9,6 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
+import { Inject, forwardRef } from '@nestjs/common';
 import { MessagesService } from './messages.service';
 
 interface AuthenticatedSocket extends Socket {
@@ -33,6 +34,7 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   constructor(
     private jwtService: JwtService,
+    @Inject(forwardRef(() => MessagesService))
     private messagesService: MessagesService,
   ) {}
 
