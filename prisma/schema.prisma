@@ -38,7 +38,6 @@ model User {
   customFieldOfStudy      String?
   degree                  String?
   profession              String?
-  lookingFor              String[]               @default([])
   hobbies                 String[]               @default([])
   values                  String[]               @default([])
   sundayActivity          String?
@@ -55,6 +54,7 @@ model User {
   profilePhoto1           String?
   profilePhoto2           String?
   profilePhoto3           String?
+  lookingFor              String[]               @default([])
   sentBlessings           BlessWallEntry[]       @relation("SentBlessings")
   receivedBlessings       BlessWallEntry[]       @relation("ReceivedBlessings")
   challengeParticipations ChallengeParticipant[] @relation("ChallengeParticipations")
@@ -80,19 +80,19 @@ model User {
 }
 
 model UserPreferences {
-  id                         String         @id @default(uuid())
-  userId                     String         @unique
+  id                         String   @id @default(uuid())
+  userId                     String   @unique
   preferredGender            Gender?
-  preferredDenomination      String
-  minAge                     Int            @default(18)
-  maxAge                     Int            @default(100)
-  maxDistance                Int            @default(50)
+  minAge                     Int      @default(18)
+  maxAge                     Int      @default(100)
+  maxDistance                Int      @default(50)
   preferredFaithJourney      String?
   preferredChurchAttendance  String?
-  preferredRelationshipGoals Json?          @default("[]")
-  createdAt                  DateTime       @default(now())
-  updatedAt                  DateTime       @updatedAt
-  user                       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  preferredDenomination      String
+  preferredRelationshipGoals Json?    @default("[]")
+  user                       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_preferences")
 }

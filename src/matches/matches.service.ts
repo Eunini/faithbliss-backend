@@ -73,7 +73,7 @@ export class MatchesService {
       const whereConditions: any = {
         id: { notIn: likedIds },
         isActive: true,
-        onboardingCompleted: true, // Only show users who completed onboarding
+        onboardingCompleted: true,
       };
 
       // Basic preferences
@@ -81,8 +81,13 @@ export class MatchesService {
         whereConditions.gender = preferences.preferredGender;
       }
 
+      // FIX: Handle denomination filter properly
       if (preferences.preferredDenomination && preferences.preferredDenomination.length > 0) {
-        whereConditions.denomination = { in: preferences.preferredDenomination };
+        // Ensure it's always treated as an array
+        const denominations = Array.isArray(preferences.preferredDenomination) 
+          ? preferences.preferredDenomination 
+          : [preferences.preferredDenomination];
+        whereConditions.denomination = { in: denominations };
       }
 
       if (preferences.minAge || preferences.maxAge) {
@@ -119,7 +124,7 @@ export class MatchesService {
       // Relationship goals compatibility - match preferences against user's lookingFor field
       if ((preferences as any).preferredRelationshipGoals && Array.isArray((preferences as any).preferredRelationshipGoals) && (preferences as any).preferredRelationshipGoals.length > 0) {
         const relationshipGoalsConditions = (preferences as any).preferredRelationshipGoals.map(goal => ({
-          lookingFor: { equals: goal }
+          lookingFor: { has: goal }
         }));
 
         if (relationshipGoalsConditions.length > 0) {
@@ -227,7 +232,11 @@ export class MatchesService {
       }
 
       if (filters.preferredDenominations && filters.preferredDenominations.length > 0) {
-        whereConditions.denomination = { in: filters.preferredDenominations };
+        // Ensure it's always treated as an array
+        const denominations = Array.isArray(filters.preferredDenominations) 
+          ? filters.preferredDenominations 
+          : [filters.preferredDenominations];
+        whereConditions.denomination = { in: denominations };
       }
 
       if (filters.minAge || filters.maxAge) {
@@ -261,7 +270,7 @@ export class MatchesService {
 
       if (filters.preferredRelationshipGoals && Array.isArray(filters.preferredRelationshipGoals) && filters.preferredRelationshipGoals.length > 0) {
         const relationshipGoalsConditions = filters.preferredRelationshipGoals.map(goal => ({
-          lookingFor: { equals: goal }
+          lookingFor: { has: goal }
         }));
 
         if (relationshipGoalsConditions.length > 0) {

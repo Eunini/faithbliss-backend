@@ -268,10 +268,10 @@ export class AuthController {
       faithJourney: request.body.faith_journey,
       spiritualGifts: request.body.spiritual_gifts ? JSON.parse(request.body.spiritual_gifts) : undefined,
 
-      // Personal Preferences
+      // Personal Preferences - FIXED: Convert to arrays
       interests: request.body.interests ? JSON.parse(request.body.interests) : undefined,
-      relationshipGoals: request.body.relationship_goals,
-      lifestyle: request.body.personality, // Map personality to lifestyle
+      relationshipGoals: request.body.relationship_goals ? JSON.parse(request.body.relationship_goals) : undefined, // Already array
+      lifestyle: request.body.lifestyle ? JSON.parse(request.body.lifestyle) : undefined, // Convert to array
       bio: request.body.bio,
       favoriteVerse: request.body.favorite_verse,
 
@@ -288,12 +288,17 @@ export class AuthController {
       preferredRelationshipGoals: request.body.preferred_relationship_goals ? JSON.parse(request.body.preferred_relationship_goals) : undefined,
     };
 
-    // Add hobbies and values if provided
+    // Add hobbies and values if provided - FIXED: Convert to arrays
     if (request.body.hobbies) {
-      onboardingData.interests = JSON.parse(request.body.hobbies);
+      onboardingData.interests = [...(onboardingData.interests || []), ...JSON.parse(request.body.hobbies)];
     }
     if (request.body.values) {
-      onboardingData.spiritualGifts = JSON.parse(request.body.values);
+      onboardingData.spiritualGifts = [...(onboardingData.spiritualGifts || []), ...JSON.parse(request.body.values)];
+    }
+
+    // Handle personality -> lifestyle mapping - FIXED: Convert to array
+    if (request.body.personality) {
+      onboardingData.lifestyle = JSON.parse(request.body.personality);
     }
 
     const result = await this.authService.completeOnboarding(request.user.id, onboardingData, files);
