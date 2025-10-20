@@ -117,19 +117,43 @@ export class UsersService {
     try {
       if (!existingUser.preferences) {
         // Create preferences if they don't exist
+        const preferencesData: any = { ...updatePreferencesDto };
+
+        if (preferencesData.preferredDenomination) {
+          preferencesData.preferredDenomination = JSON.stringify(preferencesData.preferredDenomination);
+        }
+        if (preferencesData.preferredFaithJourney) {
+          preferencesData.preferredFaithJourney = JSON.stringify(preferencesData.preferredFaithJourney);
+        }
+        if (preferencesData.preferredChurchAttendance) {
+          preferencesData.preferredChurchAttendance = JSON.stringify(preferencesData.preferredChurchAttendance);
+        }
+
         const preferences = await this.prisma.userPreferences.create({
           data: {
             userId,
-            ...updatePreferencesDto,
+            ...preferencesData,
           },
         });
         return preferences;
       }
 
+        const preferencesData: any = { ...updatePreferencesDto };
+
+        if (preferencesData.preferredDenomination) {
+          preferencesData.preferredDenomination = JSON.stringify(preferencesData.preferredDenomination);
+        }
+        if (preferencesData.preferredFaithJourney) {
+          preferencesData.preferredFaithJourney = JSON.stringify(preferencesData.preferredFaithJourney);
+        }
+        if (preferencesData.preferredChurchAttendance) {
+          preferencesData.preferredChurchAttendance = JSON.stringify(preferencesData.preferredChurchAttendance);
+        }
+
       // Update existing preferences
       const updatedPreferences = await this.prisma.userPreferences.update({
         where: { userId },
-        data: updatePreferencesDto,
+        data: preferencesData,
       });
 
       return updatedPreferences;

@@ -51,10 +51,13 @@ export class AuthService {
         preferences: {
           create: {
             preferredGender: userData.gender === 'MALE' ? 'FEMALE' : 'MALE',
-            preferredDenomination: [userData.denomination],
+            preferredDenomination: JSON.stringify([userData.denomination]),
             minAge: Math.max(18, userData.age - 5),
             maxAge: userData.age + 10,
             maxDistance: 50,
+            preferredFaithJourney: JSON.stringify([]),
+            preferredChurchAttendance: JSON.stringify([]),
+            preferredRelationshipGoals: [],
           },
         },
       },
@@ -318,7 +321,7 @@ export class AuthService {
       // Map user's own relationship goals to lookingFor
       ...(relationshipGoals && { lookingFor: { set: relationshipGoals.map(goal => goal.toString()) } }),
       // Map lifestyle to personality
-      ...(lifestyle && { personality: lifestyle }),
+      ...(lifestyle && { personality: JSON.stringify(lifestyle) }),
       // Map user's own church attendance to sundayActivity
       ...(churchAttendance && { sundayActivity: churchAttendance.toString() }),
       // Map baptism status to faithJourney (keeping existing logic)
@@ -356,12 +359,12 @@ export class AuthService {
         preferences: {
           update: {
             ...(preferredGender && { preferredGender }),
-            ...(preferredDenominations && { preferredDenomination: preferredDenominations }),
+            ...(preferredDenominations && { preferredDenomination: JSON.stringify(preferredDenominations) }),
             ...(minAge && { minAge }),
             ...(maxAge && { maxAge }),
             ...(maxDistance && { maxDistance }),
-            ...(preferredFaithJourney && { preferredFaithJourney }),
-            ...(preferredChurchAttendance && { preferredChurchAttendance }),
+            ...(preferredFaithJourney && { preferredFaithJourney: JSON.stringify(preferredFaithJourney) }),
+            ...(preferredChurchAttendance && { preferredChurchAttendance: JSON.stringify(preferredChurchAttendance) }),
             ...(preferredRelationshipGoals && { preferredRelationshipGoals }),
           }
         },
@@ -436,26 +439,50 @@ export class AuthService {
       // Create new user with email as ID
       user = await this.prisma.user.create({
         data: {
-          id: email, // Use email as the user ID
           email,
           name,
-          profilePhoto1: picture, // Use Google profile picture as first photo
-          passwordHash: '', // No password needed for Google OAuth
-          gender: 'MALE', // Default values - will be updated during onboarding
+          profilePhoto1: picture && typeof picture === 'string' ? picture : null,
+          profilePhoto2: null,
+          profilePhoto3: null,
+          passwordHash: '',
+          gender: 'MALE',
           age: 25,
           denomination: 'OTHER',
           location: '',
-          bio: '',
-          isVerified: true, // Google accounts are considered verified
+          bio: null,
+          phoneNumber: null,
+          countryCode: null,
+          birthday: null,
+          grewUp: null,
+          hometown: null,
+          currentLocation: null,
+          customDenomination: null,
+          churchDepartment: null,
+          completedClasses: null,
+          churchDuration: null,
+          faithJourney: null,
+          faithInRelationships: null,
+          favoriteVerse: null,
+          fieldOfStudy: null,
+          customFieldOfStudy: null,
+          degree: null,
+          profession: null,
+          sundayActivity: null,
+          personality: null,
+          aboutMe: null,
+          isVerified: true,
           onboardingCompleted: false,
-          googleId,
+          googleId: googleId && typeof googleId === 'string' ? googleId : null,
           preferences: {
             create: {
-              preferredGender: 'FEMALE', // Default preference for male users
-              preferredDenomination: ['BAPTIST', 'METHODIST', 'PENTECOSTAL'], // Common denominations
+              preferredGender: 'FEMALE', 
+              preferredDenomination: JSON.stringify(['BAPTIST']), 
               minAge: 18,
               maxAge: 35,
               maxDistance: 50,
+              preferredFaithJourney: JSON.stringify([]),
+              preferredChurchAttendance: JSON.stringify([]),
+              preferredRelationshipGoals: [],
             },
           },
         },

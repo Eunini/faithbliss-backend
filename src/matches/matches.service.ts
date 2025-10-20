@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { User } from '@prisma/client';
 import { MessagesService } from '../messages/messages.service';
@@ -303,82 +303,91 @@ export class MatchesService {
   }
 
   async likeUser(userId: string, likedUserId: string) {
-    // Prevent liking the same user twice
-    const existingLike = await this.prisma.userLike.findUnique({
-      where: {
-        userId_likedUserId: {
+    try {
+      // Prevent liking the same user twice
+      const existingLike = await this.prisma.userLike.findUnique({
+        where: {
+          userId_likedUserId: {
+            userId,
+            likedUserId,
+          },
+        },
+      });
+
+      if (existingLike) {
+        throw new ConflictException('User already liked');
+      }
+
+      if (userId === likedUserId) {
+        throw new BadRequestException('Cannot like your own profile');
+      }
+
+      // Create like record
+      await this.prisma.userLike.create({
+        data: {
           userId,
           likedUserId,
         },
-      },
-    });
+      });
 
-    if (existingLike) {
-      throw new Error('User already liked');
-    }
-
-    // Create like record
-    await this.prisma.userLike.create({
-      data: {
-        userId,
-        likedUserId,
-      },
-    });
-
-    // Check if it's a mutual like
-    const mutualLike = await this.prisma.userLike.findUnique({
-      where: {
-        userId_likedUserId: {
-          userId: likedUserId,
-          likedUserId: userId,
-        },
-      },
-    });
-
-    if (mutualLike) {
-      // Create match
-      const match = await this.prisma.match.create({
-        data: {
-          user1: { connect: { id: userId } },
-          user2: { connect: { id: likedUserId } },
-          status: 'MATCHED',
+      // Check if it's a mutual like
+      const mutualLike = await this.prisma.userLike.findUnique({
+        where: {
+          userId_likedUserId: {
+            userId: likedUserId,
+            likedUserId: userId,
+          },
         },
       });
 
-      // Notify both users about the new match
-      const user = await this.prisma.user.findUnique({ where: { id: userId } });
-      const likedUser = await this.prisma.user.findUnique({ where: { id: likedUserId } });
-
-      if (user && likedUser) {
-        this.notificationsGateway.sendNotificationToUser(userId, {
-          type: 'NEW_MATCH',
-          message: `You have a new match with ${likedUser.name}!`, 
-          matchId: match.id,
-          otherUser: { id: likedUser.id, name: likedUser.name },
+      if (mutualLike) {
+        // Create match
+        const match = await this.prisma.match.create({
+          data: {
+            user1: { connect: { id: userId } },
+            user2: { connect: { id: likedUserId } },
+            status: 'MATCHED',
+          },
         });
+
+        // Notify both users about the new match
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        const likedUser = await this.prisma.user.findUnique({ where: { id: likedUserId } });
+
+        if (user && likedUser) {
+          this.notificationsGateway.sendNotificationToUser(userId, {
+            type: 'NEW_MATCH',
+            message: `You have a new match with ${likedUser.name}!`, 
+            matchId: match.id,
+            otherUser: { id: likedUser.id, name: likedUser.name },
+          });
+          this.notificationsGateway.sendNotificationToUser(likedUserId, {
+            type: 'NEW_MATCH',
+            message: `You have a new match with ${user.name}!`, 
+            matchId: match.id,
+            otherUser: { id: user.id, name: user.name },
+          });
+        }
+
+        return { isMatch: true, match };
+      }
+
+      // If not a mutual like, send a 'profile_liked' notification to the liked user
+      const likerUser = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (likerUser) {
         this.notificationsGateway.sendNotificationToUser(likedUserId, {
-          type: 'NEW_MATCH',
-          message: `You have a new match with ${user.name}!`, 
-          matchId: match.id,
-          otherUser: { id: user.id, name: user.name },
+          type: 'PROFILE_LIKED',
+          message: `${likerUser.name} liked your profile!`,
+          senderId: userId,
+          senderName: likerUser.name,
         });
       }
 
-      return { isMatch: true, match };
+      return { isMatch: false, match: null };
+    } catch (error) {
+      console.error('Error in likeUser:', error);
+      throw new InternalServerErrorException('Failed to process like request');
     }
-
-    // If not a mutual like, send a 'profile_liked' notification to the liked user
-    const likerUser = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (likerUser) {
-      this.notificationsGateway.sendNotificationToUser(likedUserId, {
-        type: 'PROFILE_LIKED',
-        message: `${likerUser.name} liked your profile!`,
-        senderId: userId,
-        senderName: likerUser.name,
-      });
-    }
-
-    return { isMatch: false, match: null };
   }
 
   async passUser(userId: string, passedUserId: string) {

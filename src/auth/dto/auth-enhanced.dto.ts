@@ -236,10 +236,11 @@ export class OnboardingDto {
   @IsEnum(RelationshipGoals, { each: true })
   relationshipGoals?: RelationshipGoals[]; // User's own relationship goals
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ type: [String], example: ['Active', 'Social'] })
   @IsOptional()
-  @IsString()
-  lifestyle?: string;
+  @IsArray()
+  @IsString({ each: true })
+  lifestyle?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()
