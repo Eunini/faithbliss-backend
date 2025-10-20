@@ -359,7 +359,7 @@ export class AuthService {
         preferences: {
           update: {
             ...(preferredGender && { preferredGender }),
-            ...(preferredDenominations && { preferredDenomination: JSON.stringify(preferredDenominations) }),
+            ...(preferredDenominations && { preferredDenomination: preferredDenominations }),
             ...(minAge && { minAge }),
             ...(maxAge && { maxAge }),
             ...(maxDistance && { maxDistance }),

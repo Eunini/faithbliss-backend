@@ -279,7 +279,7 @@ export class AuthController {
       preferredGender: request.body.preferred_gender === 'MAN' ? 'MALE' : 
                       request.body.preferred_gender === 'WOMAN' ? 'FEMALE' : 
                       request.body.preferred_gender,
-      preferredDenominations: request.body.preferred_denominations ? JSON.parse(request.body.preferred_denominations) : undefined,
+     preferredDenominations: request.body.preferred_denominations || undefined,
       minAge: request.body.min_age ? parseInt(request.body.min_age) : undefined,
       maxAge: request.body.max_age ? parseInt(request.body.max_age) : undefined,
       maxDistance: request.body.max_distance ? parseInt(request.body.max_distance) : undefined,
