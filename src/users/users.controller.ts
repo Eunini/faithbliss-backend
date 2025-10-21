@@ -107,7 +107,7 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'User not found' })
   async updateMyProfile(
     @Req() request: Request & { user: any },
-    @Body() updateProfileDto: UpdateProfileDto,
+    @Body() updateProfileDto: UpdateProfileDto, // all fields optional
   ) {
     return this.usersService.updateProfile(request.user.id, updateProfileDto);
   }

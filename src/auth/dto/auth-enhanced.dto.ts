@@ -262,7 +262,7 @@ export class OnboardingDto {
   @IsOptional()
   @IsArray()
   @IsEnum(Denomination, { each: true })
-  preferredDenominations?: Denomination[];
+  preferredDenominations?: Denomination;
 
   @ApiPropertyOptional({ example: 18, minimum: 18 })
   @IsOptional()
