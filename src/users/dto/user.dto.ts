@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsInt, IsUrl, IsEnum, IsArray, Min, Max } from 'class-validator';
+import { IsOptional, IsString, IsInt, IsUrl, IsEnum, IsArray, Min, Max, IsNumber } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export enum Gender {
@@ -38,10 +38,63 @@ export class UpdateProfileDto {
   @IsString()
   bio?: string;
 
+  @ApiPropertyOptional({ description: 'User denomination' })
+  @IsOptional()
+  @IsEnum(Denomination)
+  denomination?: Denomination;
+
+  @ApiPropertyOptional({ description: 'User faith journey' })
+  @IsOptional()
+  @IsString()
+  faithJourney?: string;
+
+  @ApiPropertyOptional({ description: 'User favorite verse' })
+  @IsOptional()
+  @IsString()
+  favoriteVerse?: string;
+
   @ApiPropertyOptional({ description: 'Location (city, state)' })
   @IsOptional()
   @IsString()
   location?: string;
+
+  @ApiPropertyOptional({ description: 'Latitude' })
+  @IsOptional()
+  @IsNumber()
+  latitude?: number | null;
+
+  @ApiPropertyOptional({ description: 'Longitude' })
+  @IsOptional()
+  @IsNumber()
+  longitude?: number | null;
+
+  @ApiPropertyOptional({ description: 'Field of study' })
+  @IsOptional()
+  @IsString()
+  fieldOfStudy?: string;
+
+  @ApiPropertyOptional({ description: 'Profession' })
+  @IsOptional()
+  @IsString()
+  profession?: string;
+
+  @ApiPropertyOptional({ description: 'User hobbies' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  hobbies?: string[];
+
+  @ApiPropertyOptional({ description: 'User values' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  values?: string[];
+
+  @ApiPropertyOptional({ description: 'User looking for' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  lookingFor?: string[];
 
   @ApiPropertyOptional({ description: 'Primary profile photo (base64 or URL)' })
   @IsOptional()
@@ -57,10 +110,7 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   profilePhoto3?: string;
-
-
 }
-
 export class UpdatePreferencesDto {
   @ApiPropertyOptional({ enum: Gender, description: 'Preferred gender' })
   @IsOptional()

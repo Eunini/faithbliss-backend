@@ -62,19 +62,30 @@ export class UsersService {
   }
 
   async updateProfile(userId: string, updateProfileDto: UpdateProfileDto) {
-    const existingUser = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
+    const existingUser = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!existingUser) throw new NotFoundException('User not found');
 
-    if (!existingUser) {
-      throw new NotFoundException('User not found');
+    // Define allowed fields for update
+    const allowedFields: Array<keyof UpdateProfileDto> = [
+      'name', 'age', 'bio', 'location', 'latitude', 'longitude',
+      'denomination', 'faithJourney', 'favoriteVerse', 'fieldOfStudy',
+      'profession', 'hobbies', 'values', 'lookingFor',
+      'profilePhoto1', 'profilePhoto2', 'profilePhoto3',
+    ];
+
+    // Filter only the fields provided in the request
+    const dataToUpdate: Partial<UpdateProfileDto> = {};
+    for (const key of allowedFields) {
+      if (updateProfileDto[key] !== undefined) {
+        dataToUpdate[key as string] = updateProfileDto[key];
+      }
     }
 
     try {
       const updatedUser = await this.prisma.user.update({
         where: { id: userId },
         data: {
-          ...updateProfileDto,
+          ...dataToUpdate,
           updatedAt: new Date(),
         },
         select: {
@@ -86,7 +97,18 @@ export class UsersService {
           denomination: true,
           bio: true,
           location: true,
+          latitude: true,
+          longitude: true,
+          fieldOfStudy: true,
+          profession: true,
+          hobbies: true,
+          values: true,
+          lookingFor: true,
+          faithJourney: true,
+          favoriteVerse: true,
           profilePhoto1: true,
+          profilePhoto2: true,
+          profilePhoto3: true,
           isVerified: true,
           createdAt: true,
           updatedAt: true,
@@ -95,10 +117,8 @@ export class UsersService {
 
       return updatedUser;
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2002') {
-          throw new ConflictException('Email already exists');
-        }
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Email already exists');
       }
       throw error;
     }

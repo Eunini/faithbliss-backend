@@ -68,40 +68,143 @@ export class MessagesService {
     this.messagesGateway.sendNotificationToUser(userId, notification);
   }
 
-  async getMatchMessages(matchId: string, userId: string, page: number = 1, limit: number = 50) {
-    // Verify user is part of the match
-    const match = await this.prisma.match.findFirst({
+  async createMatch(otherUserId: string, currentUserId: string) {
+    // Check if match already exists
+    let matchRecord = await this.prisma.match.findFirst({
       where: {
-        id: matchId,
         OR: [
-          { user1Id: userId },
-          { user2Id: userId },
+          { user1Id: currentUserId, user2Id: otherUserId },
+          { user1Id: otherUserId, user2Id: currentUserId },
         ],
       },
     });
 
-    if (!match) {
-      throw new Error('Match not found or user not authorized');
-    }
+    if (!matchRecord) {
+      // Ensure the other user exists
+      const otherUser = await this.prisma.user.findUnique({
+        where: { id: otherUserId },
+      });
 
-    const skip = (page - 1) * limit;
+      if (!otherUser) {
+        throw new Error('The other user does not exist');
+      }
 
-    return this.prisma.message.findMany({
-      where: { matchId },
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            name: true,
-          },
+      // Create the match
+      matchRecord = await this.prisma.match.create({
+        data: {
+          user1Id: currentUserId,
+          user2Id: otherUserId,
         },
-      },
-    });
+      });
+
+      const [user1, user2] = await Promise.all([
+        this.prisma.user.findUnique({ where: { id: currentUserId } }),
+        this.prisma.user.findUnique({ where: { id: otherUserId } }),
+      ]);
+
+      const transformedMatch = {
+        id: matchRecord.id,
+        userId: user1?.id || currentUserId,
+        matchedUserId: user2?.id || otherUserId,
+        createdAt: matchRecord.createdAt.toISOString(),
+        user: user1 || undefined,
+        matchedUser: user2 || undefined,
+      };
+
+      return { match: transformedMatch, created: true };
+    } else {
+      // If match already exists, transform it to Match interface
+      const [user1, user2] = await Promise.all([
+        this.prisma.user.findUnique({ where: { id: matchRecord.user1Id } }),
+        this.prisma.user.findUnique({ where: { id: matchRecord.user2Id } }),
+      ]);
+
+      const transformedMatch = {
+        id: matchRecord.id,
+        userId: user1?.id === currentUserId ? user1.id : user2?.id!,
+        matchedUserId: user1?.id === currentUserId ? user2?.id! : user1?.id!,
+        createdAt: matchRecord.createdAt.toISOString(),
+        user: user1?.id === currentUserId ? user1 : user2,
+        matchedUser: user1?.id === currentUserId ? user2 : user1,
+      };
+
+      return { match: transformedMatch, created: false };
+    }
   }
 
+
+  async getMatchMessages(
+    matchId: string, 
+    userId: string, 
+    page: number = 1, 
+    limit: number = 50, 
+    otherUserId?: string
+  ) {
+    // Check if match exists and if the user is part of it
+    let match = await this.prisma.match.findFirst({
+      where: {
+        id: matchId,
+        OR: [{ user1Id: userId }, { user2Id: userId }],
+      },
+    });
+
+    // If no match exists, try to find an existing match between the two users
+    if (!match && otherUserId) {
+      match = await this.prisma.match.findFirst({
+        where: {
+          OR: [
+            { user1Id: userId, user2Id: otherUserId },
+            { user1Id: otherUserId, user2Id: userId },
+          ],
+        },
+      });
+
+      // If still not found, create a new match
+      if (!match) {
+        const otherUser = await this.prisma.user.findUnique({
+          where: { id: otherUserId },
+        });
+
+        if (!otherUser) {
+          throw new Error('The other user does not exist');
+        }
+
+        match = await this.prisma.match.create({
+          data: {
+            user1Id: userId,
+            user2Id: otherUserId,
+          },
+        });
+      }
+    }
+
+    // Fetch messages for this match
+    const messages = await this.prisma.message.findMany({
+      where: { matchId: match.id },
+      orderBy: { createdAt: 'asc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    // Fetch user objects for transformation
+    const [user1, user2] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: match.user1Id } }),
+      this.prisma.user.findUnique({ where: { id: match.user2Id } }),
+    ]);
+
+    const transformedMatch = {
+      id: match.id,
+      userId: user1?.id === userId ? user1.id : user2?.id!,
+      matchedUserId: user1?.id === userId ? user2?.id! : user1?.id!,
+      createdAt: match.createdAt.toISOString(),
+      user: user1?.id === userId ? user1 : user2,
+      matchedUser: user1?.id === userId ? user2 : user1,
+    };
+
+    return { match: transformedMatch, messages };
+  }
+
+  
   async markMessageAsRead(messageId: string, userId: string) {
     const message = await this.prisma.message.findFirst({
       where: {
@@ -143,12 +246,14 @@ export class MessagesService {
           select: {
             id: true,
             name: true,
+            profilePhoto1: true,
           },
         },
         user2: {
           select: {
             id: true,
             name: true,
+            profilePhoto1: true,
           },
         },
         messages: {
@@ -179,12 +284,19 @@ export class MessagesService {
       },
     });
 
-    return matches.map(match => ({
-      id: match.id,
-      otherUser: match.user1Id === userId ? (match as any).user2 : (match as any).user1,
-      lastMessage: (match as any).messages?.[0] || null,
-      unreadCount: (match as any)._count?.messages || 0,
-      updatedAt: match.updatedAt,
-    }));
+    return matches.map(match => {
+      const otherUser = match.user1Id === userId ? match.user2 : match.user1;
+      return {
+        id: match.id,
+        otherUser: {
+          id: otherUser.id,
+          name: otherUser.name,
+          profilePhoto1: otherUser.profilePhoto1,
+        },
+        lastMessage: match.messages?.[0] || null,
+        unreadCount: match._count?.messages || 0,
+        updatedAt: match.updatedAt,
+      };
+    });
   }
 }
